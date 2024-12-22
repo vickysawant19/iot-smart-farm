@@ -1,3 +1,5 @@
+#include <Arduino.h>
+#include <ESP8266WiFi.h>
 #include <WiFiManager.h>
 #include <SocketIoClient.h>
 #include <DHT.h>
@@ -8,8 +10,8 @@
 
 DHT dht(DHTPIN, DHTTYPE);
 
-const char* host = "your_server_ip"; // e.g., "192.168.1.100"
-const int port = 3000; // Your server port
+const char* host = "iot-smart-farm-production.up.railway.app"; // Your Railway server URL
+const int port = 8080; // Your server port
 
 SocketIoClient socket;
 unsigned long previousMillis = 0;
