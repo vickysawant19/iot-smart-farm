@@ -27,6 +27,7 @@ io.on("connection", (socket) => {
 
   socket.on("sensorData", (msg) => {
     console.log(`Data received from ${socket.id}:`, msg);
+    io.emit("sensorData", msg);
   });
 
   socket.on("disconnect", (reason) => {
