@@ -2,6 +2,7 @@
 #include <ESP8266WiFi.h>
 #include <WiFiManager.h>
 #include <SocketIoClient.h>
+#include <WiFiClientSecure.h>
 #include <DHT.h>
 
 // DHT sensor settings
@@ -11,9 +12,11 @@
 DHT dht(DHTPIN, DHTTYPE);
 
 const char* host = "iot-smart-farm-production.up.railway.app"; // Your Railway server URL
-const int port = 8080; // Your server port
-
+const int port = 443; // HTTPS port
+WiFiClientSecure secureClient;
 SocketIoClient socket;
+
+// Variables for timing and connection state
 unsigned long previousMillis = 0;
 bool isConnected = false;
 
@@ -59,7 +62,7 @@ void setup() {
   // Initialize Socket.IO connection
   socket.on("connect", onConnect);
   socket.on("disconnect", onDisconnect);
-  socket.begin(host, port);
+  socket.beginSSL(host, port);
 }
 
 void loop() {
