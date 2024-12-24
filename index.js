@@ -101,7 +101,6 @@ io.on("connection", (socket) => {
       );
       devices.set(chipId, socket.id);
     }
-    console.log(`Data received from chip ${chipId}:`, msg);
     client.forEach((chipIds, clientSocketId) => {
       if (chipIds.some(({ chipId: id }) => id === chipId)) {
         io.to(clientSocketId).emit("sensorDataResponse", msg);
