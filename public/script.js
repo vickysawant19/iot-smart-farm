@@ -1,4 +1,9 @@
 // Connect to the server using Socket.IO
+// const socket = io({
+//   transports: ["websocket"], // Use WebSocket transport
+// });
+
+// Connect to the server using Socket.IO
 const socket = io("https://iot-smart-farm-production.up.railway.app", {
   transports: ["websocket"], // Use WebSocket transport
 });
@@ -6,6 +11,10 @@ const socket = io("https://iot-smart-farm-production.up.railway.app", {
 // Listen for "event" messages from the server
 socket.on("event", (data) => {
   console.log("Event received:", data);
+});
+
+socket.on("heartbeat", (data) => {
+  console.log("Heartbeat received:", data);
 });
 
 // Initialize temperature and humidity display with "N/A"
