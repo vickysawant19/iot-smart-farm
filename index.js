@@ -27,19 +27,15 @@ const chipConnections = {};
 io.on("connection", (socket) => {
   console.log(`Client connected: ${socket.id}`);
 
-  socket.on("register", (chipcode) => {
-    console.log(`Chip registered: ${chipcode}`);
-    chipConnections[chipcode] = socket.id;
-    socket.emit("registerConfirm", chipcode);
-  });
-
-  socket.on("sensorData", (msg) => {
-    console.log(`Data received from ${socket.id}:`, msg);
-    io.emit("sensorData", msg);
+  socket.on("register", ({ chipId }) => {
+    console.log(`Chip registered: ${chipId}`);
+    chipConnections[chipId] = socket.id;
+    socket.emit("registerConfirm", chipId);
   });
 
   socket.on("heartbeat", (msg) => {
     console.log(`Data received from ${socket.id}:`, msg);
+    console.log(chipConnections);
   });
 
   setInterval(() => {
