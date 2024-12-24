@@ -29,9 +29,9 @@ io.on("connection", (socket) => {
   console.log(`Client connected: ${socket.id}`);
 
   socket.on("register", ({ chipId }) => {
-    console.log(`Chip registered: ${chipId}`);
     devices.set(chipId, socket.id);
     socket.emit("registerConfirm", chipId);
+    console.log(`Chip registered: ${chipId}`);
 
     // Notify all client connections about the chip connection
     client.forEach((chipIds, clientSocketId) => {
@@ -47,7 +47,6 @@ io.on("connection", (socket) => {
   socket.on("clientRegister", (chipIds) => {
     console.log(`Client registered for chips: ${chipIds}`);
     client.set(socket.id, chipIds); // Map clientSocketId to chipIds array
-    console.log("chipsIds", chipIds);
 
     chipIds.forEach(({ chipId }) => {
       if (!devices.has(chipId)) {
@@ -70,7 +69,6 @@ io.on("connection", (socket) => {
       socket.emit("error", `Chip ${chipId} not connected.`);
     } else {
       io.to(devices.get(chipId)).emit("motor_action", msg);
-      console.log(`Data sent to ${devices.get(chipId)}:`, msg);
     }
   });
 
@@ -78,7 +76,7 @@ io.on("connection", (socket) => {
     const { chipId } = msg;
     if (!chipId) {
       console.log("chipId not provided in sensorDataRequest.");
-      socket.emit("error", "chipId not provided.");
+      socket.emit("error", "chipId not provided in sensorDataRequest.");
       return;
     }
     if (!devices.has(chipId)) {
@@ -86,7 +84,6 @@ io.on("connection", (socket) => {
       socket.emit("error", `Chip ${chipId} not connected.`);
     } else {
       io.to(devices.get(chipId)).emit("sensorDataRequest", msg);
-      // console.log(`Data Request sent to ${devices.get(chipId)}:`, msg);
     }
   });
 
@@ -127,7 +124,6 @@ io.on("connection", (socket) => {
       socket.emit("error", `Chip ${chipId} not connected.`);
       return;
     }
-    console.log(`Data received from chip ${chipId}:`, msg);
     io.to(devices.get(chipId)).emit("motor_action", msg);
   });
 
@@ -145,7 +141,6 @@ io.on("connection", (socket) => {
       );
       devices.set(chipId, socket.id);
     }
-    console.log(`Data received from chip ${chipId}:`, msg);
     client.forEach((chipIds, clientSocketId) => {
       if (chipIds.some(({ chipId: id }) => id === chipId)) {
         io.to(clientSocketId).emit("motorStatusResponse", msg);
@@ -165,8 +160,6 @@ io.on("connection", (socket) => {
         io.to(clientSocketId).emit("heartbeat", msg);
       }
     });
-    // console.log(`Data received from ${socket.id}:`, msg);
-    // console.log(client, devices);
   });
 
   // Handle disconnection
