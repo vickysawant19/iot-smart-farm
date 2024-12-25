@@ -6,6 +6,8 @@ import http from "http";
 const server = http.createServer(app);
 
 import { Server } from "socket.io";
+import appwriteService from "./appwrite/service.js";
+
 const io = new Server(server, {
   pingInterval: 10000,
   pingTimeout: 60000,
@@ -29,7 +31,7 @@ io.on("connection", (socket) => {
   console.log(`Client connected: ${socket.id}`);
 
   socket.on("register", ({ chipId }) => {
-    devices.set(chipId, socket.id);
+    devices.set(chipId, { socketId: socket.id, lastStoredTime: 0 });
     socket.emit("registerConfirm", chipId);
     console.log(`Chip registered: ${chipId}`);
 
@@ -68,7 +70,7 @@ io.on("connection", (socket) => {
       console.log(`Chip ${chipId} not connected.`);
       socket.emit("error", `Chip ${chipId} not connected.`);
     } else {
-      io.to(devices.get(chipId)).emit("motor_action", msg);
+      io.to(devices.get(chipId).socketId).emit("motor_action", msg);
     }
   });
 
@@ -83,13 +85,20 @@ io.on("connection", (socket) => {
       console.log(`Chip ${chipId} not connected.`);
       socket.emit("error", `Chip ${chipId} not connected.`);
     } else {
-      io.to(devices.get(chipId)).emit("sensorDataRequest", msg);
+      io.to(devices.get(chipId).socketId).emit("sensorDataRequest", msg);
     }
   });
 
   //responce from sensor device
-  socket.on("sensorDataResponse", (msg) => {
-    const { chipId } = msg;
+  socket.on("sensorDataResponse", async (msg) => {
+    const {
+      chipId,
+      temperature,
+      humidity,
+      soilMoisture,
+      lightIntensity,
+      motorStatus,
+    } = msg;
     if (!chipId) {
       console.log("chipId not provided in sensorDataResponse.");
       socket.emit("error", "chipId not provided.");
@@ -99,13 +108,42 @@ io.on("connection", (socket) => {
       console.log(
         `Chip ${chipId} not saved. Storing chip ${chipId} with socket id ${socket.id}.`
       );
-      devices.set(chipId, socket.id);
+      devices.set(chipId, { socketId: socket.id, lastStoredTime: 0 });
     }
     client.forEach((chipIds, clientSocketId) => {
       if (chipIds.some(({ chipId: id }) => id === chipId)) {
         io.to(clientSocketId).emit("sensorDataResponse", msg);
       }
     });
+
+    // Track the last stored time for each chip
+    if (!devices.get(chipId).lastStoredTime) {
+      devices.get(chipId).lastStoredTime = 0;
+    }
+
+    const currentTime = Date.now();
+    const lastStoredTime = devices.get(chipId).lastStoredTime;
+    const interval = 30 * 60 * 1000; // 30 minutes in milliseconds
+
+    if (currentTime - lastStoredTime >= interval) {
+      try {
+        devices.get(chipId).lastStoredTime = currentTime;
+        const resp = await appwriteService.storeSensorData(
+          chipId,
+          temperature,
+          humidity,
+          soilMoisture,
+          lightIntensity,
+          motorStatus
+        );
+        // console.log(`Sensor data for chip ${chipId} stored successfully.`);
+      } catch (error) {
+        console.error(
+          `Failed to store sensor data for chip ${chipId}:`,
+          error.message
+        );
+      }
+    }
   });
 
   //motor status change action from client to device
@@ -123,7 +161,7 @@ io.on("connection", (socket) => {
       socket.emit("error", `Chip ${chipId} not connected.`);
       return;
     }
-    io.to(devices.get(chipId)).emit("motor_action", msg);
+    io.to(devices.get(chipId).socketId).emit("motor_action", msg);
   });
 
   //motor status response from device
@@ -138,7 +176,7 @@ io.on("connection", (socket) => {
       console.log(
         `Chip ${chipId} not saved. Storing chip ${chipId} with socket id ${socket.id}.`
       );
-      devices.set(chipId, socket.id);
+      devices.set(chipId, { socketId: socket.id, lastStoredTime: 0 });
     }
     client.forEach((chipIds, clientSocketId) => {
       if (chipIds.some(({ chipId: id }) => id === chipId)) {
@@ -150,7 +188,7 @@ io.on("connection", (socket) => {
   socket.on("heartbeat", (msg) => {
     const { chipId } = msg;
     if (!devices.has(chipId)) {
-      devices.set(chipId, socket.id);
+      devices.set(chipId, { socketId: socket.id, lastStoredTime: 0 });
       console.log(`Chip ${chipId} added to connections.`);
     }
     //send heartbeat to client with same chipId
@@ -161,13 +199,29 @@ io.on("connection", (socket) => {
     });
   });
 
+  //socket event to request sensor data from device with interval of 30 minutes if exceeded then store data in appwrite
+  if (!global.sensorDataInterval) {
+    global.sensorDataInterval = setInterval(() => {
+      devices.forEach(({ socketId, lastStoredTime }, chipId) => {
+        const interval = 30 * 60 * 1000; // 30 minutes in milliseconds
+        const currentTime = Date.now();
+        if (currentTime - lastStoredTime >= interval) {
+          io.to(socketId).emit("sensorDataRequest", {
+            chipId,
+          });
+        }
+      });
+    }, 60 * 1000);
+  }
+
+  //
   // Handle disconnection
   socket.on("disconnect", (reason) => {
     console.log(`Client disconnected: ${socket.id}, Reason: ${reason}`);
     // Get chipId using socket.id from devices
     let disconnectedChipId = null;
     for (const [chipId, chipSocketId] of devices.entries()) {
-      if (chipSocketId === socket.id) {
+      if (chipSocketId.socketId === socket.id) {
         disconnectedChipId = chipId;
         console.log(`Removing chip ${chipId} from connections.`);
         devices.delete(chipId);
