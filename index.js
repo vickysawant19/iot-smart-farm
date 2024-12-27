@@ -10,7 +10,7 @@ import appwriteService from "./appwrite/service.js";
 
 const io = new Server(server, {
   pingInterval: 10000,
-  pingTimeout: 60000,
+  pingTimeout: 20000,
   cors: {
     origin: "*",
     methods: ["GET", "POST"],
@@ -128,7 +128,7 @@ io.on("connection", (socket) => {
     if (currentTime - lastStoredTime >= interval) {
       try {
         devices.get(chipId).lastStoredTime = currentTime;
-        const resp = await appwriteService.storeSensorData(
+        await appwriteService.storeSensorData(
           chipId,
           temperature,
           humidity,
@@ -136,7 +136,6 @@ io.on("connection", (socket) => {
           lightIntensity,
           motorStatus
         );
-        // console.log(`Sensor data for chip ${chipId} stored successfully.`);
       } catch (error) {
         console.error(
           `Failed to store sensor data for chip ${chipId}:`,
@@ -150,14 +149,10 @@ io.on("connection", (socket) => {
   socket.on("motor_action", (msg) => {
     const { chipId, status } = msg;
     if (!chipId || !status) {
-      console.log("chipId or status not provided in motor_action.");
       socket.emit("error", "chipId or status not provided.");
       return;
     }
     if (!devices.has(chipId)) {
-      console.log(
-        `Chip ${chipId} not saved. Storing chip ${chipId} with socket id ${socket.id}.`
-      );
       socket.emit("error", `Chip ${chipId} not connected.`);
       return;
     }
@@ -187,10 +182,6 @@ io.on("connection", (socket) => {
 
   socket.on("heartbeat", (msg) => {
     const { chipId } = msg;
-    if (!devices.has(chipId)) {
-      devices.set(chipId, { socketId: socket.id, lastStoredTime: 0 });
-      console.log(`Chip ${chipId} added to connections.`);
-    }
     //send heartbeat to client with same chipId
     client.forEach((chipIds, clientSocketId) => {
       if (chipIds.some(({ chipId: id }) => id === chipId)) {
