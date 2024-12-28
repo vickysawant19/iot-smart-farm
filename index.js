@@ -10,7 +10,7 @@ import appwriteService from "./appwrite/service.js";
 
 const io = new Server(server, {
   pingInterval: 10000,
-  pingTimeout: 20000,
+  pingTimeout: 60000,
   cors: {
     origin: "*",
     methods: ["GET", "POST"],
@@ -24,11 +24,15 @@ app.use(express.static("public"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Constants
+const SENSOR_DATA_INTERVAL = 30 * 60 * 1000; // 30 minutes
+const SENSOR_CHECK_INTERVAL = 60 * 1000; // 1 minute
+
 const devices = new Map();
 const client = new Map();
 
 io.on("connection", (socket) => {
-  console.log(`Client connected: ${socket.id}`);
+  // console.log(`Client connected: ${socket.id}`);
 
   socket.on("register", ({ chipId }) => {
     devices.set(chipId, { socketId: socket.id, lastStoredTime: 0 });
@@ -37,7 +41,7 @@ io.on("connection", (socket) => {
 
     // Notify all client connections about the chip connection
     client.forEach((chipIds, clientSocketId) => {
-      if (chipIds.some(({ chipId: id }) => id === chipId)) {
+      if (chipIds.some((id) => id === chipId)) {
         io.to(clientSocketId).emit("chipConnected", {
           chipId,
           status: "connected",
@@ -47,15 +51,14 @@ io.on("connection", (socket) => {
   });
 
   socket.on("clientRegister", (chipIds) => {
-    console.log(`Client registered for chips: ${chipIds}`);
+    console.log("Client registered for chips: ", chipIds);
     client.set(socket.id, chipIds); // Map clientSocketId to chipIds array
-
-    chipIds.forEach(({ chipId }) => {
+    chipIds.forEach((chipId) => {
       if (!devices.has(chipId)) {
-        console.log(`Chip ${chipId} not connected.`);
+        // console.log(`Chip ${chipId} not connected.`);
         socket.emit("error", `Chip ${chipId} not connected.`);
       } else {
-        console.log(`Chip ${chipId} connected.`);
+        // console.log(`Chip ${chipId} connected.`);
         socket.emit("success", {
           chipId,
           message: `Chip ${chipId} connected.`,
@@ -64,14 +67,18 @@ io.on("connection", (socket) => {
     });
   });
 
+  //motor status change action from client to device
   socket.on("motor_action", (msg) => {
-    const { chipId } = msg;
-    if (!devices.has(chipId)) {
-      console.log(`Chip ${chipId} not connected.`);
-      socket.emit("error", `Chip ${chipId} not connected.`);
-    } else {
-      io.to(devices.get(chipId).socketId).emit("motor_action", msg);
+    const { chipId, status } = msg;
+    if (!chipId || !status) {
+      socket.emit("error", "chipId or status not provided.");
+      return;
     }
+    if (!devices.has(chipId)) {
+      socket.emit("error", `Chip ${chipId} not connected.`);
+      return;
+    }
+    io.to(devices.get(chipId).socketId).emit("motor_action", msg);
   });
 
   socket.on("sensorDataRequest", (msg) => {
@@ -82,7 +89,7 @@ io.on("connection", (socket) => {
       return;
     }
     if (!devices.has(chipId)) {
-      console.log(`Chip ${chipId} not connected.`);
+      // console.log(`Chip ${chipId} not connected.`);
       socket.emit("error", `Chip ${chipId} not connected.`);
     } else {
       io.to(devices.get(chipId).socketId).emit("sensorDataRequest", msg);
@@ -111,7 +118,7 @@ io.on("connection", (socket) => {
       devices.set(chipId, { socketId: socket.id, lastStoredTime: 0 });
     }
     client.forEach((chipIds, clientSocketId) => {
-      if (chipIds.some(({ chipId: id }) => id === chipId)) {
+      if (chipIds.some((id) => id === chipId)) {
         io.to(clientSocketId).emit("sensorDataResponse", msg);
       }
     });
@@ -145,20 +152,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  //motor status change action from client to device
-  socket.on("motor_action", (msg) => {
-    const { chipId, status } = msg;
-    if (!chipId || !status) {
-      socket.emit("error", "chipId or status not provided.");
-      return;
-    }
-    if (!devices.has(chipId)) {
-      socket.emit("error", `Chip ${chipId} not connected.`);
-      return;
-    }
-    io.to(devices.get(chipId).socketId).emit("motor_action", msg);
-  });
-
   //motor status response from device
   socket.on("motorStatusResponse", (msg) => {
     const { chipId } = msg;
@@ -174,7 +167,7 @@ io.on("connection", (socket) => {
       devices.set(chipId, { socketId: socket.id, lastStoredTime: 0 });
     }
     client.forEach((chipIds, clientSocketId) => {
-      if (chipIds.some(({ chipId: id }) => id === chipId)) {
+      if (chipIds.some((id) => id === chipId)) {
         io.to(clientSocketId).emit("motorStatusResponse", msg);
       }
     });
@@ -184,7 +177,7 @@ io.on("connection", (socket) => {
     const { chipId } = msg;
     //send heartbeat to client with same chipId
     client.forEach((chipIds, clientSocketId) => {
-      if (chipIds.some(({ chipId: id }) => id === chipId)) {
+      if (chipIds.some((id) => id === chipId)) {
         io.to(clientSocketId).emit("heartbeat", msg);
       }
     });
@@ -222,7 +215,7 @@ io.on("connection", (socket) => {
     // Notify all client connections about the chip disconnection
     if (disconnectedChipId) {
       client.forEach((chipIds, clientSocketId) => {
-        if (chipIds.some(({ chipId }) => chipId === disconnectedChipId)) {
+        if (chipIds.some((chipId) => chipId === disconnectedChipId)) {
           io.to(clientSocketId).emit("chipDisconnected", {
             chipId: disconnectedChipId,
             status: "disconnected",
@@ -232,6 +225,15 @@ io.on("connection", (socket) => {
     }
   });
 });
+
+setInterval(() => {
+  const currentTime = Date.now();
+  devices.forEach(({ socketId, lastStoredTime }, chipId) => {
+    if (currentTime - lastStoredTime >= SENSOR_DATA_INTERVAL) {
+      io.to(socketId).emit("sensorDataRequest", { chipId });
+    }
+  });
+}, SENSOR_CHECK_INTERVAL);
 
 const PORT = process.env.PORT || 3000;
 
