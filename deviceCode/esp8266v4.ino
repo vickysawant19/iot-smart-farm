@@ -212,10 +212,13 @@ void setup() {
     USE_SERIAL.printf("[SETUP] WiFi Connected. IP: %s\n", WiFi.localIP().toString().c_str());
 
     // // Socket.IO setup
-    // socketIO.begin("192.168.1.6", 3000, "/socket.io/?EIO=4");
+    // socketIO.begin("192.168.1.47", 3000, "/socket.io/?EIO=4");
 
-    // ..socket SSL
-    socketIO.beginSSL("iot-smart-farm-production.up.railway.app", 443, "/socket.io/?EIO=4");
+    // railway deployment..socket SSL
+    // socketIO.beginSSL("iot-smart-farm-production.up.railway.app", 443, "/socket.io/?EIO=4");
+
+    // render deployment....
+    socketIO.beginSSL("iot-smart-farm.onrender.com", 443, "/socket.io/?EIO=4");
 
     // Event handler
     socketIO.onEvent(socketIOEvent);

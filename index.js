@@ -139,10 +139,10 @@ io.on("connection", (socket) => {
         devices.get(chipId).lastStoredTime = currentTime;
         await appwriteService.storeSensorData(
           chipId,
-          temperature,
-          humidity,
-          soilMoisture,
-          lightIntensity,
+          parseInt(temperature),
+          parseInt(humidity),
+          parseInt(soilMoisture),
+          parseInt(lightIntensity),
           motorStatus
         );
       } catch (error) {
