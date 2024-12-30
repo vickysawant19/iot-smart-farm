@@ -35,10 +35,12 @@ io.on("connection", (socket) => {
   // console.log(`Client connected: ${socket.id}`);
 
   socket.on("register", ({ chipId }) => {
-    devices.set(chipId, { socketId: socket.id, lastStoredTime: 0 });
-    socket.emit("registerConfirm", chipId);
-    console.log(`Chip registered: ${chipId}`);
-
+    if(!devices.get(chipId)){
+      devices.set(chipId, { socketId: socket.id, lastStoredTime: 0 });
+      socket.emit("registerConfirm", chipId);
+      console.log(`Chip registered: ${chipId}`);
+    }
+    console.log("chip already connected")
     // Notify all client connections about the chip connection
     client.forEach((chipIds, clientSocketId) => {
       if (chipIds.some((id) => id === chipId)) {

@@ -18,8 +18,11 @@ SocketIOclient socketIO;
 
 #define USE_SERIAL Serial
 
+
+//register chip flag
 bool isRegistered = false;
 
+//chipId 
 const char* chipId = "CHIP0001";
 
 // Define DHT sensor type and pin
@@ -28,12 +31,14 @@ const char* chipId = "CHIP0001";
 
 // Define motor pin
 #define MOTOR_PIN D4
-int soilMoisture = 0;
+float soilMoisture = 0;
 int lightIntensity = 0;
 bool motorStatus = false;
 
 // Initialize DHT sensor
 DHT dht(DHTPIN, DHTTYPE);
+
+
 
 // Function to send events back to the server
 void sendEvent(const String& eventName, JsonObject& data) {
@@ -74,24 +79,29 @@ void handleSocketEvent(String event, JsonObject& data) {
                 float temperature = dht.readTemperature();
                 float humidity = dht.readHumidity();
                 if (isnan(temperature)) {
-                    temperature = random(20, 30); // Default temperature range
+                    temperature = 0; // Default temperature range
                 }
                 if (isnan(humidity)) {
-                    humidity = random(40, 60); // Default humidity range
+                    humidity = 0; // Default humidity range
                 }
-                // Generate random values for soil moisture and light intensity
-                soilMoisture = random(300, 800); // Example range for soil moisture
-                lightIntensity = random(100, 1000); // Example range for light intensity
+                int sensorValue = analogRead(A0);
+                // Map the sensor value to a moisture percentage (assuming sensor value ranges from 600 to 1024)
+                soilMoisture = 100 - (((sensorValue - 600) / (1024.0 - 600)) * 100.0);
+                if(soilMoisture > 100){
+                  soilMoisture = 100;
+                }
+                lightIntensity = random(900, 1000); // Example range for light intensity
+                responseData["chipId"] = chipId; // Send chipId
                 responseData["temperature"] = temperature;
                 responseData["humidity"] = humidity;
                 responseData["soilMoisture"] = soilMoisture;
                 responseData["motorStatus"] = motorStatus;
                 responseData["lightIntensity"] = lightIntensity;
-                responseData["chipId"] = chipId; // Send chipId
                 sendEvent("sensorDataResponse", responseData);
                 USE_SERIAL.printf("Sent sensor data: Temperature = %.2f, Humidity = %.2f\n", temperature, humidity);
             }
             break;
+
 
         case 'm': // motor_action
             if (event == "motor_action") {
@@ -105,7 +115,7 @@ void handleSocketEvent(String event, JsonObject& data) {
                     motorStatus = false; // Update motorStatus
                     USE_SERIAL.println("Motor turned OFF");
                 }
-                responseData["status"] = motorStatus ? "ON" : "OFF";
+                responseData["status"] = digitalRead(MOTOR_PIN) == HIGH ? "ON" : "OFF";
                 responseData["chipId"] = chipId; // Send chipId
                 sendEvent("motorStatusResponse", responseData);
             }
@@ -117,10 +127,12 @@ void handleSocketEvent(String event, JsonObject& data) {
     }
 }
 
+
 // Socket.IO event handler
 void socketIOEvent(socketIOmessageType_t type, uint8_t* payload, size_t length) {
     switch (type) {
         case sIOtype_DISCONNECT:
+             isRegistered = false;
             USE_SERIAL.printf("[IOc] Disconnected!\n");
             break;
 
@@ -171,6 +183,7 @@ void socketIOEvent(socketIOmessageType_t type, uint8_t* payload, size_t length) 
     }
 }
 
+
 void setup() {
     // Begin serial communication
     USE_SERIAL.begin(115200);
@@ -199,10 +212,10 @@ void setup() {
     USE_SERIAL.printf("[SETUP] WiFi Connected. IP: %s\n", WiFi.localIP().toString().c_str());
 
     // // Socket.IO setup
-    socketIO.begin("192.168.1.7", 3000, "/socket.io/?EIO=4");
+    // socketIO.begin("192.168.1.6", 3000, "/socket.io/?EIO=4");
 
     // ..socket SSL
-    // socketIO.beginSSL("iot-smart-farm-production.up.railway.app", 443, "/socket.io/?EIO=4");
+    socketIO.beginSSL("iot-smart-farm-production.up.railway.app", 443, "/socket.io/?EIO=4");
 
     // Event handler
     socketIO.onEvent(socketIOEvent);
@@ -255,3 +268,4 @@ void loop() {
         }
     }
 }
+
